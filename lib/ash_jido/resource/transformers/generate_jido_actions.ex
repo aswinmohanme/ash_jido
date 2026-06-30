@@ -44,6 +44,7 @@ defmodule AshJido.Resource.Transformers.GenerateJidoActions do
 
   @doc false
   def after?(Ash.Resource.Transformers.ValidateRelationshipAttributes), do: true
+  def after?(Ash.Resource.Transformers.GetByReadActions), do: true
   def after?(_), do: false
 
   defp expand_jido_entities(resource, entities, dsl_state) do
