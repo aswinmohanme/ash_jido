@@ -6,6 +6,7 @@ defmodule AshJido.Runtime do
   @doc false
   @spec run(ActionSpec.t(), map(), map()) :: {:ok, term()} | {:error, term()}
   def run(%ActionSpec{} = spec, params, context) do
+    {context, params} = extract_ambient_context(params, context)
     ash_opts = AshJido.Context.extract_ash_opts!(context, spec.resource, spec.action_name)
     telemetry_meta = telemetry_metadata(spec, ash_opts)
     telemetry_span = AshJido.Telemetry.start(spec.config, telemetry_meta)
@@ -65,6 +66,8 @@ defmodule AshJido.Runtime do
   end
 
   defp execute_action(spec, params, context, ash_opts, telemetry_span) do
+    params = Map.filter(params, fn {k, _} -> is_atom(k) or is_binary(k) end)
+
     try do
       do_execute_action(spec, params, context, ash_opts)
     rescue
@@ -254,5 +257,21 @@ defmodule AshJido.Runtime do
     else
       empty_signal_meta()
     end
+  end
+
+  # Extracts values from non-atom/non-binary keyed entries (e.g. Jido.Composer.Context
+  # ambient data stored under a tuple key) and merges them into the execution context
+  # so AshJido can find :actor, :authorize?, etc. Original context values win.
+  defp extract_ambient_context(params, context) do
+    {ambient_entries, clean_params} =
+      Enum.split_with(params, fn {k, _} -> not (is_atom(k) or is_binary(k)) end)
+
+    merged_context =
+      ambient_entries
+      |> Enum.flat_map(fn {_, v} -> if is_map(v), do: Map.to_list(v), else: [] end)
+      |> Map.new()
+      |> Map.merge(context)
+
+    {merged_context, Map.new(clean_params)}
   end
 end
